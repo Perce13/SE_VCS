@@ -105,7 +105,7 @@ def create_pdf(consistency_score, feature_scores, df):
 def main():
 
     # Logo laden und anzeigen
-    logo = Image.open('/SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
+    logo = Image.open('SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
     st.image(logo, width=200)
 
     st.title("Image Consistency Analyzer")

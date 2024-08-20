@@ -105,7 +105,7 @@ def create_pdf(consistency_score, feature_scores, df):
 def main():
 
     # Logo laden und anzeigen
-    logo = Image.open('/Users/fitterhappier/Library/CloudStorage/GoogleDrive-per@sighteffect.ai/Geteilte Ablagen/SightEffect_Intern/02_Brand/01_CI/Logo_Button/20240221_SE_Logo_Button/PNG/SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
+    logo = Image.open('/SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
     st.image(logo, width=200)
 
     st.title("Image Consistency Analyzer")

@@ -5,9 +5,13 @@ import cv2
 from PIL import Image
 import io
 import base64
+import matplotlib.pyplot as plt
 
 def is_grayscale(img_rgb):
     return np.allclose(img_rgb[:,:,0], img_rgb[:,:,1]) and np.allclose(img_rgb[:,:,1], img_rgb[:,:,2])
+
+def measure_blur(img_gray):
+    return cv2.Laplacian(img_gray, cv2.CV_64F).var()
 
 def analyze_image(uploaded_file):
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
@@ -21,18 +25,33 @@ def analyze_image(uploaded_file):
     
     color_means = np.mean(img_rgb, axis=(0,1))
 
-    brightness_mean = np.mean(img_gray)
-    brightness_std = np.std(img_gray)
+    brightness_channel = img_hsv[:,:,2]
+    brightness_mean = np.mean(brightness_channel)
+    brightness_std = np.std(brightness_channel)
 
     saturation_mean = np.mean(img_hsv[:,:,1]) if not is_gray else 0
     hue_mean = np.mean(img_hsv[:,:,0]) if not is_gray else 0
 
-    wb_r = np.mean(img_rgb[:,:,0]) / brightness_mean
-    wb_g = np.mean(img_rgb[:,:,1]) / brightness_mean
-    wb_b = np.mean(img_rgb[:,:,2]) / brightness_mean
+    threshold = np.percentile(img_gray, 90)
+    mask = img_gray > threshold
+    
+    r_mean = np.mean(img_rgb[:,:,0][mask])
+    g_mean = np.mean(img_rgb[:,:,1][mask])
+    b_mean = np.mean(img_rgb[:,:,2][mask])
+    
+    wb_r = r_mean / (r_mean + g_mean + b_mean)
+    wb_g = g_mean / (r_mean + g_mean + b_mean)
+    wb_b = b_mean / (r_mean + g_mean + b_mean)
+    
+    wb_rg_ratio = np.exp(5 * (wb_r - wb_g))
+    wb_rb_ratio = np.exp(5 * (wb_r - wb_b))
+
+    wb_temp = 100 * (wb_rb_ratio - 1) / (wb_rb_ratio + 1)
 
     shadows = np.mean(img_gray < 64)
     highlights = np.mean(img_gray > 192)
+
+    blur_measure = measure_blur(img_gray)
 
     return {
         'filename': uploaded_file.name,
@@ -44,28 +63,31 @@ def analyze_image(uploaded_file):
         'brightness_std': brightness_std,
         'hue_mean': hue_mean,
         'saturation_mean': saturation_mean,
-        'wb_r': wb_r,
-        'wb_g': wb_g,
-        'wb_b': wb_b,
+        'wb_rg_ratio': wb_rg_ratio,
+        'wb_rb_ratio': wb_rb_ratio,
+        'wb_temp': wb_temp,
         'shadow_proportion': shadows,
-        'highlight_proportion': highlights
+        'highlight_proportion': highlights,
+        'blur_measure': blur_measure
     }
 
 def calculate_consistency_score(df):
     features = {
-        'color': ['hue_mean', 'saturation_mean'],
-        'brightness': ['brightness_mean'],
-        'white_balance': ['wb_r', 'wb_g', 'wb_b'],
+        'color': ['r_mean', 'g_mean', 'b_mean'],
+        'brightness': ['brightness_mean', 'brightness_std'],
+        'white_balance': ['wb_temp'],
         'shadows_highlights': ['shadow_proportion', 'highlight_proportion'],
-        'contrast': ['brightness_std']
+        'contrast': ['brightness_std'],
+        'blur': ['blur_measure']
     }
     
     weights = {
-        'color': 0.10,
-        'brightness': 0.25,
-        'white_balance': 0.10,
+        'color': 0.05,
+        'brightness': 0.20,
+        'white_balance': 0.15,
         'shadows_highlights': 0.25,
-        'contrast': 0.30
+        'contrast': 0.20,
+        'blur': 0.15
     }
     
     scores = {}
@@ -92,7 +114,8 @@ def create_report(consistency_score, feature_scores, df):
         'brightness': "Zeigt, wie konsistent die Gesamthelligkeit der Bilder ist.",
         'white_balance': "Prüft, ob die Farbtemperatur in allen Bildern ähnlich ist.",
         'shadows_highlights': "Untersucht die Konsistenz von sehr dunklen und sehr hellen Bereichen.",
-        'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen."
+        'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen.",
+        'blur': "Bewertet die Konsistenz des kreativen Einsatzes von Unschärfe in den Bildern."
     }
 
     for feature, score in feature_scores.items():
@@ -105,20 +128,32 @@ def create_report(consistency_score, feature_scores, df):
     return report_content
 
 def interpret_score(score):
-    if score >= 80:
+    if score >= 90:
         return "Highly Consistent"
-    elif score >= 60:
+    elif score >= 80:
         return "Consistent"
-    elif score >= 40:
+    elif score >= 60:
         return "Moderately Consistent"
-    elif score >= 20:
+    elif score >= 40:
         return "Inconsistent"
     else:
         return "Highly Inconsistent"
 
+def interpret_wb(temp):
+    if temp > 50:
+        return "sehr warm"
+    elif temp > 25:
+        return "warm"
+    elif temp < -50:
+        return "sehr kühl"
+    elif temp < -25:
+        return "kühl"
+    else:
+        return "neutral"
+
 def main():
 
-    # Logo laden und anzeigen
+     # Logo laden und anzeigen
     logo = Image.open('SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
     st.image(logo, width=200)
     
@@ -161,7 +196,8 @@ def main():
                 'brightness': "Zeigt, wie konsistent die Gesamthelligkeit der Bilder ist.",
                 'white_balance': "Prüft, ob die Farbtemperatur in allen Bildern ähnlich ist.",
                 'shadows_highlights': "Untersucht die Konsistenz von sehr dunklen und sehr hellen Bereichen.",
-                'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen."
+                'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen.",
+                'blur': "Bewertet die Konsistenz des kreativen Einsatzes von Unschärfe in den Bildern."
             }
 
             for feature, score in feature_scores.items():

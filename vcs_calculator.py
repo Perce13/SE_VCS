@@ -73,11 +73,24 @@ def calculate_consistency_score(df):
         elif feature_group == 'contrast':
             scores[feature_group] = 100 * np.exp(-3 * cv)
         else:
-            scores[feature_group] = 100 * (1 - cv**2)
+            raw_score = 100 * (1 - cv**2)
+            scores[feature_group] = max(0, raw_score)  # Verhindert negative Werte, behält aber 0 für sehr inkonsistente Bilder
     
     weighted_score = sum(scores[group] * weight for group, weight in weights.items())
     
-    return weighted_score, scores
+    return max(0, weighted_score), scores  # Verhindert negative Gesamtscores
+
+def interpret_score(score):
+    if score >= 80:
+        return "Highly Consistent"
+    elif score >= 60:
+        return "Consistent"
+    elif score >= 40:
+        return "Moderately Consistent"
+    elif score >= 20:
+        return "Inconsistent"
+    else:
+        return "Highly Inconsistent"
 
 def create_report(consistency_score, feature_scores, df):
     report_content = f"Deine Konsistenz Kompetenz liegt bei: {consistency_score:.2f}%\n\n"

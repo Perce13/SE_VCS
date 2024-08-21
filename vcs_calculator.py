@@ -25,9 +25,6 @@ def analyze_image(uploaded_file):
     wb_g = np.mean(img_rgb[:,:,1]) / brightness_mean
     wb_b = np.mean(img_rgb[:,:,2]) / brightness_mean
 
-    edges = cv2.Canny(img_gray, 100, 200)
-    edge_density = np.sum(edges) / (img.shape[0] * img.shape[1])
-
     shadows = np.mean(img_gray < 64)
     highlights = np.mean(img_gray > 192)
 
@@ -42,7 +39,6 @@ def analyze_image(uploaded_file):
         'wb_r': wb_r,
         'wb_g': wb_g,
         'wb_b': wb_b,
-        'edge_density': edge_density,
         'shadow_proportion': shadows,
         'highlight_proportion': highlights
     }
@@ -53,7 +49,6 @@ def calculate_consistency_score(df):
         'brightness': ['brightness_mean'],
         'saturation': ['saturation_mean'],
         'white_balance': ['wb_r', 'wb_g', 'wb_b'],
-        'edge': ['edge_density'],
         'shadows_highlights': ['shadow_proportion', 'highlight_proportion'],
         'contrast': ['brightness_std']
     }
@@ -62,90 +57,110 @@ def calculate_consistency_score(df):
         'color': 0.25,
         'brightness': 0.20,
         'saturation': 0.15,
-        'white_balance': 0.15,
-        'edge': 0.10,
-        'shadows_highlights': 0.10,
-        'contrast': 0.05
+        'white_balance': 0.05,
+        'shadows_highlights': 0.25,
+        'contrast': 0.10
     }
     
     scores = {}
     
     for feature_group, feature_list in features.items():
         group_data = df[feature_list]
-        cv = np.mean([np.std(group_data[col]) / np.mean(group_data[col]) for col in feature_list])
-        scores[feature_group] = np.exp(-cv) * 100  # Umwandlung in Prozent
+        cv = np.mean([np.std(group_data[col]) / (np.mean(group_data[col]) + 1e-5) for col in feature_list])
+        
+        if feature_group == 'saturation':
+            scores[feature_group] = np.exp(-cv) * 100
+        elif feature_group == 'contrast':
+            scores[feature_group] = 100 * np.exp(-3 * cv)
+        else:
+            scores[feature_group] = 100 * (1 - cv**2)
     
     weighted_score = sum(scores[group] * weight for group, weight in weights.items())
     
     return weighted_score, scores
 
-def create_pdf(consistency_score, feature_scores, df):
-    # Da wir reportlab nicht verwenden, geben wir stattdessen einen String zurück
-    pdf_content = f"Overall Consistency Score: {consistency_score:.2f}%\n\n"
+def create_report(consistency_score, feature_scores, df):
+    report_content = f"Deine Konsistenz Kompetenz liegt bei: {consistency_score:.2f}%\n\n"
     
     feature_explanations = {
         'color': "Misst, wie einheitlich die Farbverteilung in den Bildern ist.",
         'brightness': "Zeigt, wie konsistent die Gesamthelligkeit der Bilder ist.",
         'saturation': "Bewertet die Gleichmäßigkeit der Farbintensität über alle Bilder.",
         'white_balance': "Prüft, ob die Farbtemperatur in allen Bildern ähnlich ist.",
-        'edge': "Vergleicht die Menge und Stärke von Konturen und Details in den Bildern.",
         'shadows_highlights': "Untersucht die Konsistenz von sehr dunklen und sehr hellen Bereichen.",
         'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen."
     }
 
     for feature, score in feature_scores.items():
-        pdf_content += f"{feature.capitalize()}: {score:.2f}%\n"
-        pdf_content += f"{feature_explanations[feature]}\n\n"
+        report_content += f"{feature.capitalize()}: {score:.2f}%\n"
+        report_content += f"{feature_explanations[feature]}\n\n"
 
-    pdf_content += "Image Analysis Results:\n"
-    pdf_content += df.to_string()
+    report_content += "Detaillierte Bildanalyse:\n"
+    report_content += df.to_string()
 
-    return pdf_content
+    return report_content
 
 def main():
-
+    
     # Logo laden und anzeigen
-    logo = Image.open('SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
+    logo = Image.open('logo = Image.open('SE_Logo_Button_RGB-ON Blau.png')')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
     st.image(logo, width=200)
 
-    st.title("Image Consistency Analyzer")
+    st.title("Visual Consistency Challenge")
 
-    uploaded_files = st.file_uploader("Choose image files", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+    st.write("Bist du bereit, dein Auge für visuelle Konsistenz auf die Probe zu stellen? Lade 5 Bilder hoch und schätze ihre Konsistenz ein. Unser Tool wird dir zeigen, wie gut du wirklich bist!")
 
-    if uploaded_files and st.button("Analyze Images"):
-        results = []
-        for uploaded_file in uploaded_files:
-            results.append(analyze_image(uploaded_file))
-        
-        df = pd.DataFrame(results)
-        
-        consistency_score, feature_scores = calculate_consistency_score(df)
-        
-        st.markdown(f"<h1 style='text-align: center; color: black;'>Overall Consistency Score: {consistency_score:.2f}%</h1>", unsafe_allow_html=True)
-        
-        feature_explanations = {
-            'color': "Misst, wie einheitlich die Farbverteilung in den Bildern ist.",
-            'brightness': "Zeigt, wie konsistent die Gesamthelligkeit der Bilder ist.",
-            'saturation': "Bewertet die Gleichmäßigkeit der Farbintensität über alle Bilder.",
-            'white_balance': "Prüft, ob die Farbtemperatur in allen Bildern ähnlich ist.",
-            'edge': "Vergleicht die Menge und Stärke von Konturen und Details in den Bildern.",
-            'shadows_highlights': "Untersucht die Konsistenz von sehr dunklen und sehr hellen Bereichen.",
-            'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen."
-        }
+    st.write("Visuelle Konsistenz ist die geheime Geheimwaffe erfolgreicher Marken. Wer sie beherrscht, kann Kunden magisch anziehen und Konkurrenten in den Schatten stellen. Bist du bereit, deine Superkraft zu entdecken?")
 
-        for feature, score in feature_scores.items():
-            st.markdown(f"<h3 style='color: black;'>{feature.capitalize()}: {score:.2f}%</h3>", unsafe_allow_html=True)
-            st.write(feature_explanations[feature])
+    uploaded_files = st.file_uploader("Fordere dich heraus: Lade 5 Bilder hoch!", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+
+    if uploaded_files:
+        filenames = [file.name for file in uploaded_files]
+        if len(filenames) != len(set(filenames)):
+            st.warning("Achtung: Es wurden doppelte Dateien hochgeladen. Dies könnte das Ergebnis verfälschen.")
         
-        st.write("Uploaded Images:")
-        cols = st.columns(4)
-        for idx, uploaded_file in enumerate(uploaded_files):
-            cols[idx % 4].image(uploaded_file, use_column_width=True)
-        
-        pdf_content = create_pdf(consistency_score, feature_scores, df)
-        b64 = base64.b64encode(pdf_content.encode()).decode()
-        href = f'<a href="data:text/plain;base64,{b64}" download="consistency_analysis.txt">Download Results as Text File</a>'
-        st.markdown(href, unsafe_allow_html=True)
+        if st.button("Zeig mir meine Superkraft!"):
+            results = []
+            for uploaded_file in uploaded_files:
+                results.append(analyze_image(uploaded_file))
+            
+            df = pd.DataFrame(results)
+            
+            consistency_score, feature_scores = calculate_consistency_score(df)
+            
+            st.markdown("<h2 style='text-align: center; color: #1E90FF;'>Dein Konsistenz-Radar Ergebnis</h2>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='text-align: center; color: black;'>Gesamtkonsistenz: {consistency_score:.2f}%</h1>", unsafe_allow_html=True)
+            
+            feature_explanations = {
+                'color': "Misst, wie einheitlich die Farbverteilung in den Bildern ist.",
+                'brightness': "Zeigt, wie konsistent die Gesamthelligkeit der Bilder ist.",
+                'saturation': "Bewertet die Gleichmäßigkeit der Farbintensität über alle Bilder.",
+                'white_balance': "Prüft, ob die Farbtemperatur in allen Bildern ähnlich ist.",
+                'shadows_highlights': "Untersucht die Konsistenz von sehr dunklen und sehr hellen Bereichen.",
+                'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen."
+            }
+
+            for feature, score in feature_scores.items():
+                st.markdown(f"<h3 style='color: black;'>{feature.capitalize()}: {score:.2f}%</h3>", unsafe_allow_html=True)
+                st.write(feature_explanations[feature])
+            
+            st.write("Untersuchte Bilder:")
+            cols = st.columns(4)
+            for idx, uploaded_file in enumerate(uploaded_files):
+                cols[idx % 4].image(uploaded_file, use_column_width=True)
+            
+            report_content = create_report(consistency_score, feature_scores, df)
+            b64 = base64.b64encode(report_content.encode()).decode()
+            href = f'<a href="data:text/plain;base64,{b64}" download="konsistenz_analyse.txt">Lade deine detaillierte Analyse herunter</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
+    st.write("---")
+    st.write("### Warum visuelle Konsistenz so wichtig ist:")
+    st.write("- Sie schafft Wiedererkennungswert und stärkt deine Markenidentität.")
+    st.write("- Sie erhöht das Vertrauen deiner Kunden in deine Professionalität.")
+    st.write("- Sie macht deine Marketingbotschaften einprägsamer und effektiver.")
+    st.write("- Sie hebt dich von der Konkurrenz ab und macht dich unverwechselbar.")
+    st.write("Beherrsche die Kunst der visuellen Konsistenz, und deine Marke wird unaufhaltsam!")
 
 if __name__ == "__main__":
     main()

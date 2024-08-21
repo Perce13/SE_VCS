@@ -6,6 +6,9 @@ from PIL import Image
 import io
 import base64
 
+def is_grayscale(img_rgb):
+    return np.allclose(img_rgb[:,:,0], img_rgb[:,:,1]) and np.allclose(img_rgb[:,:,1], img_rgb[:,:,2])
+
 def analyze_image(uploaded_file):
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, 1)
@@ -14,12 +17,15 @@ def analyze_image(uploaded_file):
     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+    is_gray = is_grayscale(img_rgb)
+    
     color_means = np.mean(img_rgb, axis=(0,1))
 
     brightness_mean = np.mean(img_gray)
     brightness_std = np.std(img_gray)
 
-    saturation_mean = np.mean(img_hsv[:,:,1])
+    saturation_mean = np.mean(img_hsv[:,:,1]) if not is_gray else 0
+    hue_mean = np.mean(img_hsv[:,:,0]) if not is_gray else 0
 
     wb_r = np.mean(img_rgb[:,:,0]) / brightness_mean
     wb_g = np.mean(img_rgb[:,:,1]) / brightness_mean
@@ -30,11 +36,13 @@ def analyze_image(uploaded_file):
 
     return {
         'filename': uploaded_file.name,
+        'is_grayscale': is_gray,
         'r_mean': color_means[0],
         'g_mean': color_means[1],
         'b_mean': color_means[2],
         'brightness_mean': brightness_mean,
         'brightness_std': brightness_std,
+        'hue_mean': hue_mean,
         'saturation_mean': saturation_mean,
         'wb_r': wb_r,
         'wb_g': wb_g,
@@ -45,21 +53,19 @@ def analyze_image(uploaded_file):
 
 def calculate_consistency_score(df):
     features = {
-        'color': ['r_mean', 'g_mean', 'b_mean'],
+        'color': ['hue_mean', 'saturation_mean'],
         'brightness': ['brightness_mean'],
-        'saturation': ['saturation_mean'],
         'white_balance': ['wb_r', 'wb_g', 'wb_b'],
         'shadows_highlights': ['shadow_proportion', 'highlight_proportion'],
         'contrast': ['brightness_std']
     }
     
     weights = {
-        'color': 0.25,
-        'brightness': 0.20,
-        'saturation': 0.15,
-        'white_balance': 0.05,
+        'color': 0.10,
+        'brightness': 0.25,
+        'white_balance': 0.10,
         'shadows_highlights': 0.25,
-        'contrast': 0.10
+        'contrast': 0.30
     }
     
     scores = {}
@@ -68,37 +74,22 @@ def calculate_consistency_score(df):
         group_data = df[feature_list]
         cv = np.mean([np.std(group_data[col]) / (np.mean(group_data[col]) + 1e-5) for col in feature_list])
         
-        if feature_group == 'saturation':
-            scores[feature_group] = np.exp(-cv) * 100
-        elif feature_group == 'contrast':
+        if feature_group == 'contrast':
             scores[feature_group] = 100 * np.exp(-3 * cv)
         else:
             raw_score = 100 * (1 - cv**2)
-            scores[feature_group] = max(0, raw_score)  # Verhindert negative Werte, behält aber 0 für sehr inkonsistente Bilder
+            scores[feature_group] = max(0, raw_score)
     
     weighted_score = sum(scores[group] * weight for group, weight in weights.items())
     
-    return max(0, weighted_score), scores  # Verhindert negative Gesamtscores
-
-def interpret_score(score):
-    if score >= 80:
-        return "Highly Consistent"
-    elif score >= 60:
-        return "Consistent"
-    elif score >= 40:
-        return "Moderately Consistent"
-    elif score >= 20:
-        return "Inconsistent"
-    else:
-        return "Highly Inconsistent"
+    return max(0, weighted_score), scores
 
 def create_report(consistency_score, feature_scores, df):
-    report_content = f"Deine Konsistenz Kompetenz liegt bei: {consistency_score:.2f}%\n\n"
+    report_content = f"Dein Konsistenz-Radar Ergebnis: {consistency_score:.2f}%\n\n"
     
     feature_explanations = {
         'color': "Misst, wie einheitlich die Farbverteilung in den Bildern ist.",
         'brightness': "Zeigt, wie konsistent die Gesamthelligkeit der Bilder ist.",
-        'saturation': "Bewertet die Gleichmäßigkeit der Farbintensität über alle Bilder.",
         'white_balance': "Prüft, ob die Farbtemperatur in allen Bildern ähnlich ist.",
         'shadows_highlights': "Untersucht die Konsistenz von sehr dunklen und sehr hellen Bereichen.",
         'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen."
@@ -113,12 +104,24 @@ def create_report(consistency_score, feature_scores, df):
 
     return report_content
 
+def interpret_score(score):
+    if score >= 80:
+        return "Highly Consistent"
+    elif score >= 60:
+        return "Consistent"
+    elif score >= 40:
+        return "Moderately Consistent"
+    elif score >= 20:
+        return "Inconsistent"
+    else:
+        return "Highly Inconsistent"
+
 def main():
-    
+
     # Logo laden und anzeigen
     logo = Image.open('SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
     st.image(logo, width=200)
-
+    
     st.title("Visual Consistency Challenge")
 
     st.write("Bist du bereit, dein Auge für visuelle Konsistenz auf die Probe zu stellen? Lade 5 Bilder hoch und schätze ihre Konsistenz ein. Unser Tool wird dir zeigen, wie gut du wirklich bist!")
@@ -139,15 +142,23 @@ def main():
             
             df = pd.DataFrame(results)
             
+            if any(df['is_grayscale']):
+                st.warning("Achtung: Mindestens ein Schwarz-Weiß-Bild wurde erkannt. Dies kann die Farbkonsistenzanalyse beeinflussen.")
+            
             consistency_score, feature_scores = calculate_consistency_score(df)
+            
+            if consistency_score < 20:
+                st.warning("Achtung: Die analysierten Bilder zeigen eine sehr hohe Inkonsistenz!")
             
             st.markdown("<h2 style='text-align: center; color: #1E90FF;'>Dein Konsistenz-Radar Ergebnis</h2>", unsafe_allow_html=True)
             st.markdown(f"<h1 style='text-align: center; color: black;'>Gesamtkonsistenz: {consistency_score:.2f}%</h1>", unsafe_allow_html=True)
             
+            interpretation = interpret_score(consistency_score)
+            st.markdown(f"<h3 style='text-align: center; color: black;'>Interpretation: {interpretation}</h3>", unsafe_allow_html=True)
+            
             feature_explanations = {
                 'color': "Misst, wie einheitlich die Farbverteilung in den Bildern ist.",
                 'brightness': "Zeigt, wie konsistent die Gesamthelligkeit der Bilder ist.",
-                'saturation': "Bewertet die Gleichmäßigkeit der Farbintensität über alle Bilder.",
                 'white_balance': "Prüft, ob die Farbtemperatur in allen Bildern ähnlich ist.",
                 'shadows_highlights': "Untersucht die Konsistenz von sehr dunklen und sehr hellen Bereichen.",
                 'contrast': "Bewertet die Gleichmäßigkeit des Unterschieds zwischen hellen und dunklen Bereichen."
@@ -157,7 +168,7 @@ def main():
                 st.markdown(f"<h3 style='color: black;'>{feature.capitalize()}: {score:.2f}%</h3>", unsafe_allow_html=True)
                 st.write(feature_explanations[feature])
             
-            st.write("Untersuchte Bilder:")
+            st.write("Deine Bildauswahl:")
             cols = st.columns(4)
             for idx, uploaded_file in enumerate(uploaded_files):
                 cols[idx % 4].image(uploaded_file, use_column_width=True)

@@ -7,8 +7,6 @@ import io
 import base64
 import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Visual Consistency Challenge", page_icon="🎨")
-
 def is_grayscale(img_rgb):
     return np.allclose(img_rgb[:,:,0], img_rgb[:,:,1]) and np.allclose(img_rgb[:,:,1], img_rgb[:,:,2])
 
@@ -126,11 +124,11 @@ def interpret_score(score):
         return "Needs improvement. Your images lack visual consistency and could benefit from a more cohesive approach."
 
 def main():
+    st.set_page_config(page_title="Visual Consistency Challenge", page_icon="🎨")
+
      # Logo laden und anzeigen
     logo = Image.open('SE_Logo_Button_RGB-ON Blau.png')  # Ersetzen Sie dies mit dem tatsächlichen Pfad zu Ihrem Logo
     st.image(logo, width=200)
-    
-    st.set_page_config(page_title="Visual Consistency Challenge", page_icon="🎨")
     
     st.title("Visual Consistency Challenge")
 

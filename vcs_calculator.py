@@ -7,6 +7,8 @@ import io
 import base64
 import matplotlib.pyplot as plt
 
+st.set_page_config(page_title="Visual Consistency Challenge", page_icon="🎨")
+
 def is_grayscale(img_rgb):
     return np.allclose(img_rgb[:,:,0], img_rgb[:,:,1]) and np.allclose(img_rgb[:,:,1], img_rgb[:,:,2])
 
